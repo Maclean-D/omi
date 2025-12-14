@@ -69,6 +69,12 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   TextEditingController? titleController;
   FocusNode? titleFocusNode;
 
+  TextEditingController? overviewController;
+  FocusNode? overviewFocusNode;
+
+  Map<String, TextEditingController> segmentControllers = {};
+  Map<String, FocusNode> segmentFocusNodes = {};
+
   bool isTranscriptExpanded = false;
 
   bool canDisplaySeconds = true;
@@ -188,12 +194,27 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     // updateLoadingState(true);
     titleController?.dispose();
     titleFocusNode?.dispose();
+    overviewController?.dispose();
+    overviewFocusNode?.dispose();
+
+    for (var controller in segmentControllers.values) {
+      controller.dispose();
+    }
+    for (var focusNode in segmentFocusNodes.values) {
+      focusNode.dispose();
+    }
+    segmentControllers.clear();
+    segmentFocusNodes.clear();
+
     _ratingTimer?.cancel();
     showRatingUI = false;
     hasConversationSummaryRatingSet = false;
 
     titleController = TextEditingController();
     titleFocusNode = FocusNode();
+
+    overviewController = TextEditingController();
+    overviewFocusNode = FocusNode();
 
     showUnassignedFloatingButton = true;
 
@@ -205,6 +226,33 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         updateConversationTitle(conversation.id, titleController!.text);
       }
     });
+
+    final summarizedApp = getSummarizedApp();
+    if (summarizedApp != null) {
+      overviewController!.text = summarizedApp.content;
+      overviewFocusNode!.addListener(() {
+        if (!overviewFocusNode!.hasFocus) {
+          conversation.structured.overview = overviewController!.text;
+          updateConversationOverview(conversation.id, overviewController!.text);
+        }
+      });
+    }
+
+    for (var segment in conversation.transcriptSegments) {
+      final controller = TextEditingController(text: segment.text);
+      final focusNode = FocusNode();
+
+      segmentControllers[segment.id] = controller;
+      segmentFocusNodes[segment.id] = focusNode;
+
+      focusNode.addListener(() {
+        if (!focusNode.hasFocus) {
+          final updatedText = controller.text;
+          segment.text = updatedText;
+          updateSegmentText(conversation.id, segment.id, updatedText);
+        }
+      });
+    }
 
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(conversation.transcriptSegments);
 
@@ -293,18 +341,26 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   /// Returns the first app result from the conversation if available
   /// This is typically the summary of the conversation
+  /// over AI generated summaries to ensure edits persist after refresh
   AppResponse? getSummarizedApp() {
-    if (conversation.appResults.isNotEmpty) {
-      return conversation.appResults[0];
+    final fallback = conversation.appResults.isNotEmpty ? conversation.appResults[0] : null;
+
+    if (fallback != null && conversation.structured.overview.isNotEmpty) {
+      // Clone and override content to preserve all app metadata
+      fallback.content = conversation.structured.overview;
+      return fallback;
     }
-    // If no appResults but we have structured overview, create a fake AppResponse
+
+    // If no appResults but we have overview, create synthetic response
     if (conversation.structured.overview.isNotEmpty) {
       return AppResponse(
         conversation.structured.overview,
         appId: null,
       );
     }
-    return null;
+
+    // Fall back to AI generated app result if no user edit exists
+    return fallback;
   }
 
   /// Returns the list of suggested summarization apps for this conversation
@@ -465,6 +521,20 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   @override
   void dispose() {
     _ratingTimer?.cancel();
+    titleController?.dispose();
+    titleFocusNode?.dispose();
+    overviewController?.dispose();
+    overviewFocusNode?.dispose();
+
+    for (var controller in segmentControllers.values) {
+      controller.dispose();
+    }
+    for (var focusNode in segmentFocusNodes.values) {
+      focusNode.dispose();
+    }
+    segmentControllers.clear();
+    segmentFocusNodes.clear();
+
     super.dispose();
   }
 }

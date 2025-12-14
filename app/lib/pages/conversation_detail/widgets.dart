@@ -350,7 +350,7 @@ class _GetEditTextFieldState extends State<GetEditTextField> {
     return TextField(
       keyboardType: TextInputType.multiline,
       minLines: 1,
-      maxLines: 3,
+      maxLines: null,
       focusNode: widget.focusNode,
       decoration: const InputDecoration(
         border: OutlineInputBorder(borderSide: BorderSide.none),
@@ -455,149 +455,155 @@ class AppResultDetailWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final String content = appResponse.content.trim().decodeString;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: content.isEmpty
-                ? Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            showModalBottomSheet(
-                              context: context,
-                              isScrollControlled: true,
-                              backgroundColor: Colors.transparent,
-                              builder: (context) => const SummarizedAppsBottomSheet(),
-                            );
-                          },
-                          child: RichText(
-                            text: const TextSpan(
-                                style: TextStyle(color: Colors.grey),
-                                text: "No summary available for this app. Try another app for better results."),
-                          ),
-                        ),
-                      ),
-                    ],
-                  )
-                : ConversationMarkdownWidget(
-                    content: content,
-                    searchQuery: searchQuery,
-                    currentResultIndex: currentResultIndex,
-                  ),
-          ),
-
-          // App info in a more subtle format below the content - only show if content is not empty
-          if (content.isNotEmpty)
-            GestureDetector(
-              onTap: () async {
-                if (app != null) {
-                  MixpanelManager().pageOpened('App Detail');
-                  await routeToPage(context, AppDetailPage(app: app!));
-                }
-              },
-              child: Padding(
-                padding: const EdgeInsets.only(top: 12, left: 4),
-                child: Row(
-                  children: [
-                    // App icon
-                    app != null
-                        ? CachedNetworkImage(
-                            imageUrl: app!.getImageUrl(),
-                            imageBuilder: (context, imageProvider) {
-                              return CircleAvatar(
-                                backgroundColor: Colors.white,
-                                radius: 12,
-                                backgroundImage: imageProvider,
-                              );
-                            },
-                            errorWidget: (context, url, error) {
-                              return const CircleAvatar(
-                                backgroundColor: Colors.white,
-                                radius: 12,
-                                child: Icon(Icons.error_outline_rounded, size: 12),
-                              );
-                            },
-                            progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
-                              backgroundColor: Colors.white,
-                              radius: 12,
-                              child: CircularProgressIndicator(
-                                value: progress.progress,
-                                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-                                strokeWidth: 2,
-                              ),
-                            ),
-                          )
-                        : Container(
-                            decoration: BoxDecoration(
-                              image: DecorationImage(
-                                image: AssetImage(Assets.images.background.path),
-                                fit: BoxFit.cover,
-                              ),
-                              borderRadius: const BorderRadius.all(Radius.circular(12.0)),
-                            ),
-                            height: 24,
-                            width: 24,
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                Image.asset(
-                                  Assets.images.herologo.path,
-                                  height: 16,
-                                  width: 16,
-                                ),
-                              ],
-                            ),
-                          ),
-
-                    const SizedBox(width: 8),
-
-                    // App name and description with arrow
-                    Expanded(
-                      child: Row(
+    return Consumer<ConversationDetailProvider>(
+      builder: (context, provider, child) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 20),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: content.isEmpty
+                    ? Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  app != null ? app!.name.decodeString : 'Unknown App',
-                                  maxLines: 1,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                                if (app != null)
-                                  Text(
-                                    app!.description.decodeString,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(color: Colors.grey, fontSize: 12),
-                                  ),
-                              ],
+                            child: GestureDetector(
+                              onTap: () {
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.transparent,
+                                  builder: (context) => const SummarizedAppsBottomSheet(),
+                                );
+                              },
+                              child: RichText(
+                                text: const TextSpan(
+                                    style: TextStyle(color: Colors.grey),
+                                    text: "No summary available for this app. Try another app for better results."),
+                              ),
                             ),
                           ),
-                          const SizedBox(
-                            child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20),
-                            width: 42,
-                          ),
                         ],
+                      )
+                    : GetEditTextField(
+                        conversationId: conversation.id,
+                        focusNode: provider.overviewFocusNode,
+                        controller: provider.overviewController,
+                        content: content,
+                        style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4),
                       ),
-                    ),
-                  ],
-                ),
               ),
-            ),
-        ],
-      ),
+
+              // App info in a more subtle format below the content - only show if content is not empty
+              if (content.isNotEmpty)
+                GestureDetector(
+                  onTap: () async {
+                    if (app != null) {
+                      MixpanelManager().pageOpened('App Detail');
+                      await routeToPage(context, AppDetailPage(app: app!));
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 12, left: 4),
+                    child: Row(
+                      children: [
+                        // App icon
+                        app != null
+                            ? CachedNetworkImage(
+                                imageUrl: app!.getImageUrl(),
+                                imageBuilder: (context, imageProvider) {
+                                  return CircleAvatar(
+                                    backgroundColor: Colors.white,
+                                    radius: 12,
+                                    backgroundImage: imageProvider,
+                                  );
+                                },
+                                errorWidget: (context, url, error) {
+                                  return const CircleAvatar(
+                                    backgroundColor: Colors.white,
+                                    radius: 12,
+                                    child: Icon(Icons.error_outline_rounded, size: 12),
+                                  );
+                                },
+                                progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
+                                  backgroundColor: Colors.white,
+                                  radius: 12,
+                                  child: CircularProgressIndicator(
+                                    value: progress.progress,
+                                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              )
+                            : Container(
+                                decoration: BoxDecoration(
+                                  image: DecorationImage(
+                                    image: AssetImage(Assets.images.background.path),
+                                    fit: BoxFit.cover,
+                                  ),
+                                  borderRadius: const BorderRadius.all(Radius.circular(12.0)),
+                                ),
+                                height: 24,
+                                width: 24,
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    Image.asset(
+                                      Assets.images.herologo.path,
+                                      height: 16,
+                                      width: 16,
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                        const SizedBox(width: 8),
+
+                        // App name and description with arrow
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      app != null ? app!.name.decodeString : 'Unknown App',
+                                      maxLines: 1,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    if (app != null)
+                                      Text(
+                                        app!.description.decodeString,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(
+                                child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20),
+                                width: 42,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

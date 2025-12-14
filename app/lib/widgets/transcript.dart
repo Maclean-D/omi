@@ -27,6 +27,8 @@ class TranscriptWidget extends StatefulWidget {
   final int currentResultIndex;
   final Function(ScrollController)? onScrollControllerReady;
   final VoidCallback? onTapWhenSearchEmpty;
+  final Map<String, TextEditingController>? segmentControllers;
+  final Map<String, FocusNode>? segmentFocusNodes;
 
   const TranscriptWidget({
     super.key,
@@ -45,6 +47,8 @@ class TranscriptWidget extends StatefulWidget {
     this.currentResultIndex = -1,
     this.onScrollControllerReady,
     this.onTapWhenSearchEmpty,
+    this.segmentControllers,
+    this.segmentFocusNodes,
   });
 
   @override
@@ -579,28 +583,52 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    RichText(
-                                      textAlign: TextAlign.left,
-                                      text: TextSpan(
+                                    // Check if we have a controller for this segment (editable mode)
+                                    if (widget.segmentControllers != null &&
+                                        widget.segmentFocusNodes != null &&
+                                        widget.segmentControllers!.containsKey(data.id) &&
+                                        widget.segmentFocusNodes!.containsKey(data.id))
+                                      TextField(
+                                        controller: widget.segmentControllers![data.id],
+                                        focusNode: widget.segmentFocusNodes![data.id],
                                         style: TextStyle(
                                           letterSpacing: 0.0,
                                           color: isUser ? Colors.white : Colors.grey.shade100,
                                           fontSize: 15,
                                           height: 1.4,
                                         ),
-                                        children: widget.searchQuery.isNotEmpty
-                                            ? _highlightSearchMatchesWithKeys(
-                                                _getDecodedText(data.text),
-                                                widget.searchQuery,
-                                                segmentIdx,
-                                              )
-                                            : [
-                                                TextSpan(
-                                                  text: _getDecodedText(data.text),
+                                        decoration: const InputDecoration(
+                                          border: InputBorder.none,
+                                          contentPadding: EdgeInsets.zero,
+                                          isDense: true,
+                                        ),
+                                        keyboardType: TextInputType.multiline,
+                                        minLines: 1,
+                                        maxLines: null,
+                                      )
+                                    else
+                                      RichText(
+                                        textAlign: TextAlign.left,
+                                        text: TextSpan(
+                                          style: TextStyle(
+                                            letterSpacing: 0.0,
+                                            color: isUser ? Colors.white : Colors.grey.shade100,
+                                            fontSize: 15,
+                                            height: 1.4,
+                                          ),
+                                          children: widget.searchQuery.isNotEmpty
+                                              ? _highlightSearchMatchesWithKeys(
+                                                  _getDecodedText(data.text),
+                                                  widget.searchQuery,
+                                                  segmentIdx,
                                                 )
-                                              ],
+                                              : [
+                                                  TextSpan(
+                                                    text: _getDecodedText(data.text),
+                                                  )
+                                                ],
+                                        ),
                                       ),
-                                    ),
                                     if (data.translations.isNotEmpty) ...[
                                       const SizedBox(height: 8),
                                       ...data.translations.map((translation) => Padding(
@@ -632,9 +660,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                             Text(
                                               SttProviderConfig.getDisplayName(data.sttProvider),
                                               style: TextStyle(
-                                                color: isUser
-                                                    ? Colors.white.withValues(alpha: 0.5)
-                                                    : Colors.grey.shade500,
+                                                color:
+                                                    isUser ? Colors.white.withValues(alpha: 0.5) : Colors.grey.shade500,
                                                 fontSize: 10,
                                                 fontStyle: FontStyle.italic,
                                               ),

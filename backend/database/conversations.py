@@ -320,6 +320,54 @@ def update_conversation_title(uid: str, conversation_id: str, title: str):
     conversation_ref.update({'structured.title': title})
 
 
+def update_conversation_overview(uid: str, conversation_id: str, overview: str):
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+
+    doc_snapshot = conversation_ref.get()
+    if not doc_snapshot.exists:
+        return
+
+    update_conversation(uid, conversation_id, {'structured.overview': overview})
+
+
+def update_conversation_segment_text(uid: str, conversation_id: str, segment_id: str, text: str):
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+
+    doc_snapshot = conversation_ref.get()
+    if not doc_snapshot.exists:
+        return
+
+    conversation_data = doc_snapshot.to_dict()
+
+    level = conversation_data.get('data_protection_level', 'standard')
+    decrypted_data = _prepare_conversation_for_read(conversation_data, uid)
+    if not decrypted_data:
+        return
+
+    transcript_segments = decrypted_data.get('transcript_segments', [])
+
+    # Find and update the segment
+    updated = False
+    for segment in transcript_segments:
+        if isinstance(segment, dict) and segment.get('id') == segment_id:
+            segment['text'] = text
+            updated = True
+            break
+
+    if not updated:
+        return
+
+    prepared_data = _prepare_conversation_for_write({'transcript_segments': transcript_segments}, uid, level)
+
+    update_dict = {'transcript_segments': prepared_data['transcript_segments']}
+    if 'transcript_segments_compressed' in prepared_data:
+        update_dict['transcript_segments_compressed'] = prepared_data['transcript_segments_compressed']
+
+    conversation_ref.update(update_dict)
+
+
 def delete_conversation(uid, conversation_id):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -697,7 +745,7 @@ def update_conversation_finished_at(uid: str, conversation_id: str, finished_at:
     conversation_ref.update({'finished_at': finished_at})
 
 
-def update_conversation_segments(uid: str, conversation_id: str, segments: List[dict], finished_at: datetime = None):
+def update_conversation_segments(uid: str, conversation_id: str, segments: List[dict]):
     doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
     doc_snapshot = doc_ref.get(field_paths=['data_protection_level'])
     if not doc_snapshot.exists:
@@ -705,8 +753,6 @@ def update_conversation_segments(uid: str, conversation_id: str, segments: List[
 
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     update_payload = {'transcript_segments': segments}
-    if finished_at:
-        update_payload['finished_at'] = finished_at
     prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
     doc_ref.update(prepared_payload)
 
@@ -876,8 +922,10 @@ def store_conversation_photos(uid: str, conversation_id: str, photos: List[Conve
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_timestamp: int) -> Optional[dict]:
-    start_threshold = datetime.fromtimestamp(start_timestamp, tz=timezone.utc) - timedelta(minutes=2)
-    end_threshold = datetime.fromtimestamp(end_timestamp, tz=timezone.utc) + timedelta(minutes=2)
+    print('get_closest_conversation_to_timestamps', start_timestamp, end_timestamp)
+    start_threshold = datetime.utcfromtimestamp(start_timestamp) - timedelta(minutes=2)
+    end_threshold = datetime.utcfromtimestamp(end_timestamp) + timedelta(minutes=2)
+    print('get_closest_conversation_to_timestamps', start_threshold, end_threshold)
 
     query = (
         db.collection('users')

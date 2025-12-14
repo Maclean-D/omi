@@ -229,12 +229,13 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         _copyContent(context, provider.conversation.getTranscript(generate: true));
         break;
       case 'copy_summary':
-        // Use app-generated summary if available, otherwise fall back to structured summary
+        // Use user edited overview if available
         final conversation = provider.conversation;
-        final summaryContent =
-            conversation.appResults.isNotEmpty && conversation.appResults[0].content.trim().isNotEmpty
+        final summaryContent = conversation.structured.overview.trim().isNotEmpty
+            ? conversation.structured.overview.trim()
+            : (conversation.appResults.isNotEmpty && conversation.appResults[0].content.trim().isNotEmpty
                 ? conversation.appResults[0].content.trim()
-                : conversation.structured.toString();
+                : conversation.structured.toString());
         _copyContent(context, summaryContent);
         break;
       // case 'export_transcript':
@@ -1117,6 +1118,8 @@ class TranscriptWidgets extends StatelessWidget {
                 searchQuery: searchQuery,
                 currentResultIndex: currentResultIndex,
                 onTapWhenSearchEmpty: onTapWhenSearchEmpty,
+                segmentControllers: provider.segmentControllers,
+                segmentFocusNodes: provider.segmentFocusNodes,
                 editSegment: (segmentId, speakerId) {
                   final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                   if (!connectivityProvider.isConnected) {
