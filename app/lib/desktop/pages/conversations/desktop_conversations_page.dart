@@ -150,7 +150,8 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
 
     // If conversation has no app results, update details
     if (detailProvider.conversation.appResults.isEmpty) {
-      await conversationProvider.updateSearchedConvoDetails(detailProvider.conversation.id, date, index);
+      await conversationProvider.updateSearchedConvoDetails(
+          detailProvider.conversation.id, date, index);
       detailProvider.updateConversation(detailProvider.conversation.id, date);
     }
 

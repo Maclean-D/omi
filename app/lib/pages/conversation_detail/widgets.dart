@@ -352,6 +352,85 @@ class GetEditTextField extends StatefulWidget {
   State<GetEditTextField> createState() => _GetEditTextFieldState();
 }
 
+class _EditableMarkdownField extends StatefulWidget {
+  final String conversationId;
+  final String content;
+  final TextEditingController? controller;
+  final FocusNode? focusNode;
+  final String searchQuery;
+  final int currentResultIndex;
+  final Function(int)? onMatchCountChanged;
+
+  const _EditableMarkdownField({
+    required this.conversationId,
+    required this.content,
+    required this.controller,
+    required this.focusNode,
+    this.searchQuery = '',
+    this.currentResultIndex = -1,
+    this.onMatchCountChanged,
+  });
+
+  @override
+  State<_EditableMarkdownField> createState() => _EditableMarkdownFieldState();
+}
+
+class _EditableMarkdownFieldState extends State<_EditableMarkdownField> {
+  bool _isEditing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode?.addListener(_onFocusChange);
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode?.removeListener(_onFocusChange);
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    if (!mounted) return;
+    setState(() {
+      _isEditing = widget.focusNode?.hasFocus ?? false;
+    });
+  }
+
+  void _handleDoubleTap() {
+    if (widget.controller == null) return;
+    widget.focusNode?.requestFocus();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isEditing) {
+      return GetEditTextField(
+        conversationId: widget.conversationId,
+        focusNode: widget.focusNode,
+        controller: widget.controller,
+        content: widget.content,
+        style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4),
+        searchQuery: widget.searchQuery,
+        currentResultIndex: widget.currentResultIndex,
+        onMatchCountChanged: widget.onMatchCountChanged,
+      );
+    }
+
+    final markdownContent = widget.controller?.text ?? widget.content;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onDoubleTap: _handleDoubleTap,
+      child: ConversationMarkdownWidget(
+        content: markdownContent,
+        searchQuery: widget.searchQuery,
+        currentResultIndex: widget.currentResultIndex,
+        onMatchCountChanged: widget.onMatchCountChanged,
+      ),
+    );
+  }
+}
+
 class _GetEditTextFieldState extends State<GetEditTextField> {
   List<GlobalKey> _matchKeys = [];
   int _previousResultIndex = -1;
@@ -456,7 +535,9 @@ class _GetEditTextFieldState extends State<GetEditTextField> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.searchQuery.isNotEmpty) {
+    final bool isActivelyEditing = widget.focusNode?.hasFocus ?? false;
+
+    if (widget.searchQuery.isNotEmpty && !isActivelyEditing) {
       return RichText(
         text: TextSpan(
           children: _buildHighlightedText(
@@ -611,12 +692,11 @@ class AppResultDetailWidget extends StatelessWidget {
                           ),
                         ],
                       )
-                    : GetEditTextField(
+                    : _EditableMarkdownField(
                         conversationId: conversation.id,
                         focusNode: provider.overviewFocusNode,
                         controller: provider.overviewController,
                         content: content,
-                        style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4),
                         searchQuery: searchQuery,
                         currentResultIndex: currentResultIndex,
                         onMatchCountChanged: onMatchCountChanged,

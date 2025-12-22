@@ -743,45 +743,46 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 ),
               ),
 
-              // Floating bottom bar
-              Positioned(
-                bottom: 32,
-                left: 0,
-                right: 0,
-                child: Consumer<ConversationDetailProvider>(
-                  builder: (context, provider, child) {
-                    final conversation = provider.conversation;
-                    final hasActionItems =
-                        conversation.structured.actionItems.where((item) => !item.deleted).isNotEmpty;
-                    return ConversationBottomBar(
-                      mode: ConversationBottomBarMode.detail,
-                      selectedTab: selectedTab,
-                      hasSegments: conversation.transcriptSegments.isNotEmpty ||
-                          conversation.photos.isNotEmpty ||
-                          conversation.externalIntegration != null,
-                      hasActionItems: hasActionItems,
-                      onTabSelected: (tab) {
-                        int index;
-                        switch (tab) {
-                          case ConversationTab.transcript:
-                            index = 0;
-                            break;
-                          case ConversationTab.summary:
-                            index = 1;
-                            break;
-                          case ConversationTab.actionItems:
-                            index = 2;
-                            break;
-                        }
-                        _controller!.animateTo(index);
-                      },
-                      onStopPressed: () {
-                        // Empty since we don't show the stop button in detail mode
-                      },
-                    );
-                  },
+              // Floating bottom bar - hide when keyboard is visible
+              if (MediaQuery.of(context).viewInsets.bottom == 0)
+                Positioned(
+                  bottom: 32,
+                  left: 0,
+                  right: 0,
+                  child: Consumer<ConversationDetailProvider>(
+                    builder: (context, provider, child) {
+                      final conversation = provider.conversation;
+                      final hasActionItems =
+                          conversation.structured.actionItems.where((item) => !item.deleted).isNotEmpty;
+                      return ConversationBottomBar(
+                        mode: ConversationBottomBarMode.detail,
+                        selectedTab: selectedTab,
+                        hasSegments: conversation.transcriptSegments.isNotEmpty ||
+                            conversation.photos.isNotEmpty ||
+                            conversation.externalIntegration != null,
+                        hasActionItems: hasActionItems,
+                        onTabSelected: (tab) {
+                          int index;
+                          switch (tab) {
+                            case ConversationTab.transcript:
+                              index = 0;
+                              break;
+                            case ConversationTab.summary:
+                              index = 1;
+                              break;
+                            case ConversationTab.actionItems:
+                              index = 2;
+                              break;
+                          }
+                          _controller!.animateTo(index);
+                        },
+                        onStopPressed: () {
+                          // Empty since we don't show the stop button in detail mode
+                        },
+                      );
+                    },
+                  ),
                 ),
-              ),
 
               // thinh's comment: temporary disabled
               //// Unassigned segments notification - positioned above the bottom bar

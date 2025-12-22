@@ -229,6 +229,7 @@ class _PrimarySocketListener implements IPureSocketListener {
 
   @override
   void onError(Object err, StackTrace trace) => _composite._onSocketError('Primary', err, trace);
+
 }
 
 class _SecondarySocketListener implements IPureSocketListener {

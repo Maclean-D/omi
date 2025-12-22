@@ -195,8 +195,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       // Only set schema if not already set
       if (_schemaJsonPerProvider[config.provider] == null) {
         final template = CustomSttConfig.getFullTemplateJson(config.provider);
-        _schemaJsonPerProvider[config.provider] =
-            const JsonEncoder.withIndent('  ').convert(template['response_schema']);
+        _schemaJsonPerProvider[config.provider] = const JsonEncoder.withIndent('  ').convert(template['response_schema']);
       }
     }
   }
@@ -420,7 +419,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   Future<void> _exportConfig() async {
     final config = _buildCurrentConfig();
-
+    
     // Build exportable config (exclude sensitive API key)
     final exportableConfig = <String, dynamic>{
       'provider': config.provider.name,
@@ -437,7 +436,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     };
 
     final jsonString = const JsonEncoder.withIndent('  ').convert(exportableConfig);
-
+    
     await Clipboard.setData(ClipboardData(text: jsonString));
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -462,7 +461,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   Future<void> _importConfig() async {
     final controller = TextEditingController();
-
+    
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
@@ -553,7 +552,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     try {
       final json = jsonDecode(jsonString) as Map<String, dynamic>;
       final config = CustomSttConfig.fromJson(json);
-
+      
       // Validate provider
       if (config.provider == SttProvider.omi) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -568,13 +567,13 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       setState(() {
         _selectedProvider = config.provider;
         _configsPerProvider[_selectedProvider] = config;
-
+        
         // Update UI fields
         _apiKeyController.text = config.apiKey ?? '';
         _urlController.text = config.url ?? '';
         _hostController.text = config.host ?? '127.0.0.1';
         _portController.text = (config.port ?? 8080).toString();
-
+        
         // Update JSON configs
         if (config.requestType != null || config.headers != null || config.params != null) {
           final requestConfig = <String, dynamic>{};
@@ -583,18 +582,18 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           if (config.headers != null) requestConfig['headers'] = config.headers;
           if (config.params != null) requestConfig['params'] = config.params;
           if (config.audioFieldName != null) requestConfig['audio_field_name'] = config.audioFieldName;
-
+          
           _requestJsonPerProvider[_selectedProvider] = const JsonEncoder.withIndent('  ').convert(requestConfig);
           _requestJsonCustomized[_selectedProvider] = true;
         } else {
           _regenerateRequestJson(_selectedProvider);
           _requestJsonCustomized[_selectedProvider] = false;
         }
-
+        
         if (config.schemaJson != null) {
           _schemaJsonPerProvider[_selectedProvider] = const JsonEncoder.withIndent('  ').convert(config.schemaJson);
         }
-
+        
         _configSyncVersion++;
       });
 

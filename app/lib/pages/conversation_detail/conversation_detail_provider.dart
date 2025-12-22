@@ -281,8 +281,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
 
     for (var segment in conversation.transcriptSegments) {
-      final originalText = segment.text;
-      final controller = TextEditingController(text: originalText);
+      final controller = TextEditingController(text: segment.text);
       final focusNode = FocusNode();
 
       segmentControllers[segment.id] = controller;
@@ -291,7 +290,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       focusNode.addListener(() {
         if (!focusNode.hasFocus) {
           final updatedText = controller.text;
-          if (originalText != updatedText) {
+          if (segment.text != updatedText) {
             segment.text = updatedText;
             updateSegmentText(conversation.id, segment.id, updatedText);
           }

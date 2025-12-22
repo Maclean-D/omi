@@ -79,9 +79,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   // Toggle to show/hide speaker names globally
   bool _showSpeakerNames = false;
 
-  // Track which segment is being edited
-  String? _editingSegmentId;
-
   // Define distinct muted colors for different speakers
   static const List<Color> _speakerColors = [
     Color(0xFF3A2E26), // Dark warm brown
@@ -111,10 +108,17 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     return _speakerColors[colorIndex].withValues(alpha: 0.3);
   }
 
+  bool _canEdit(String id) =>
+      widget.segmentControllers?.containsKey(id) == true &&
+      widget.segmentFocusNodes?.containsKey(id) == true;
+
+  bool _isEditing(String id) => widget.segmentFocusNodes?[id]?.hasFocus == true;
+
   @override
   void initState() {
     super.initState();
     _previousSegmentCount = widget.segments.length;
+    _userHasScrolled = false;
     _initializeSegmentKeys();
     _rebuildMatchKeys();
 
@@ -257,9 +261,14 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToBottomGently();
-    });
+    // Only auto-scroll to bottom if not editing and not manually scrolled
+    // Check if any segment has focus (is being edited)
+    final bool anySegmentEditing = widget.segmentFocusNodes?.values.any((node) => node.hasFocus) ?? false;
+    if (!anySegmentEditing && !_userHasScrolled) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToBottomGently();
+      });
+    }
   }
 
   void _scrollToSearchResult() {
@@ -480,8 +489,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final suggestion = widget.suggestions[data.id];
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final bool isUser = data.isUser;
+    final segmentKey = segmentIdx >= 0 && segmentIdx < _segmentKeys.length ? _segmentKeys[segmentIdx] : null;
+
     return Container(
-        key: segmentIdx >= 0 && segmentIdx < _segmentKeys.length ? _segmentKeys[segmentIdx] : null,
+        key: segmentKey,
         child: Padding(
           padding: EdgeInsetsDirectional.fromSTEB(
               widget.horizontalMargin ? 16 : 0, 4.0, widget.horizontalMargin ? 16 : 0, 4.0),
@@ -608,77 +619,72 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                 ),
                               ],
                             ),
-                            child: SelectionArea(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  // Double tap to edit
-                                  if (widget.searchQuery.isEmpty &&
-                                      widget.segmentControllers != null &&
-                                      widget.segmentFocusNodes != null &&
-                                      widget.segmentControllers!.containsKey(data.id) &&
-                                      widget.segmentFocusNodes!.containsKey(data.id) &&
-                                      _editingSegmentId == data.id)
-                                    TextField(
-                                      controller: widget.segmentControllers![data.id],
-                                      focusNode: widget.segmentFocusNodes![data.id],
-                                      style: TextStyle(
-                                        letterSpacing: 0.0,
-                                        color: isUser ? Colors.white : Colors.grey.shade100,
-                                        fontSize: 15,
-                                        height: 1.4,
-                                      ),
-                                      decoration: const InputDecoration(
-                                        border: InputBorder.none,
-                                        contentPadding: EdgeInsets.zero,
-                                        isDense: true,
-                                      ),
-                                      keyboardType: TextInputType.multiline,
-                                      minLines: 1,
-                                      maxLines: null,
-                                      onTapOutside: (_) => setState(() => _editingSegmentId = null),
-                                    )
-                                  else
-                                    GestureDetector(
-                                      onDoubleTap: widget.segmentControllers != null &&
-                                              widget.segmentFocusNodes != null &&
-                                              widget.searchQuery.isEmpty
-                                          ? () {
-                                              setState(() => _editingSegmentId = data.id);
-                                              widget.segmentFocusNodes![data.id]?.requestFocus();
-                                            }
-                                          : null,
-                                      child: AbsorbPointer(
-                                        child: RichText(
-                                          textAlign: TextAlign.left,
-                                          text: TextSpan(
-                                            style: TextStyle(
-                                              letterSpacing: 0.0,
-                                              color: isUser ? Colors.white : Colors.grey.shade100,
-                                              fontSize: 15,
-                                              height: 1.4,
-                                            ),
-                                            children: widget.searchQuery.isNotEmpty
-                                                ? _highlightSearchMatchesWithKeys(
-                                                    widget.segmentControllers?.containsKey(data.id) == true
-                                                        ? widget.segmentControllers![data.id]!.text
-                                                        : _getDecodedText(data.text),
-                                                    widget.searchQuery,
-                                                    segmentIdx,
-                                                  )
-                                                : [
-                                                    TextSpan(
-                                                      text: widget.segmentControllers?.containsKey(data.id) == true
+                            child: _isEditing(data.id)
+                                ? Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (widget.searchQuery.isEmpty && _canEdit(data.id))
+                                        TextField(
+                                          controller: widget.segmentControllers![data.id],
+                                          focusNode: widget.segmentFocusNodes![data.id],
+                                          style: TextStyle(
+                                            letterSpacing: 0.0,
+                                            color: isUser ? Colors.white : Colors.grey.shade100,
+                                            fontSize: 15,
+                                            height: 1.4,
+                                          ),
+                                          decoration: const InputDecoration(
+                                            border: InputBorder.none,
+                                            contentPadding: EdgeInsets.zero,
+                                            isDense: true,
+                                          ),
+                                          keyboardType: TextInputType.multiline,
+                                          minLines: 1,
+                                          maxLines: null,
+                                        ),
+                                    ],
+                                  )
+                                : SelectionArea(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        // Show RichText when not editing
+                                        GestureDetector(
+                                          onDoubleTap: _canEdit(data.id) && widget.searchQuery.isEmpty
+                                              ? () {
+                                                  widget.segmentFocusNodes![data.id]?.requestFocus();
+                                                }
+                                              : null,
+                                          child: RichText(
+                                            textAlign: TextAlign.left,
+                                            text: TextSpan(
+                                              style: TextStyle(
+                                                letterSpacing: 0.0,
+                                                color: isUser ? Colors.white : Colors.grey.shade100,
+                                                fontSize: 15,
+                                                height: 1.4,
+                                              ),
+                                              children: widget.searchQuery.isNotEmpty
+                                                  ? _highlightSearchMatchesWithKeys(
+                                                      widget.segmentControllers?.containsKey(data.id) == true
                                                           ? widget.segmentControllers![data.id]!.text
                                                           : _getDecodedText(data.text),
+                                                      widget.searchQuery,
+                                                      segmentIdx,
                                                     )
-                                                  ],
+                                                  : [
+                                                      TextSpan(
+                                                        text: widget.segmentControllers?.containsKey(data.id) == true
+                                                            ? widget.segmentControllers![data.id]!.text
+                                                            : _getDecodedText(data.text),
+                                                      )
+                                                    ],
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    ),
-                                  if (data.translations.isNotEmpty) ...[
+                                        if (data.translations.isNotEmpty) ...[
                                     const SizedBox(height: 8),
                                     ...data.translations.map((translation) => Padding(
                                           padding: const EdgeInsets.only(top: 4),
@@ -737,10 +743,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                           ),
                                       ],
                                     ),
-                                  ],
                                 ],
-                              ),
-                            ),
+                              ],
+                                  ),
+                                ),
                           ),
                         ),
                       ],
