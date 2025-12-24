@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/http/api/apps.dart';
+import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -181,17 +182,17 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   }
 
   void updateConversation(String conversationId, DateTime date) {
-    selectedDate = date;
     final list = conversationProvider?.groupedConversations[date];
     if (list != null) {
       final conv = list.firstWhereOrNull((c) => c.id == conversationId);
       if (conv != null) {
+        selectedDate = date;
         _cachedConversationId = conv.id;
         _cachedConversation = conv;
+        appResponseExpanded = List.filled(conv.appResults.length, false);
+        notifyListeners();
       }
     }
-    appResponseExpanded = List.filled(conversation.appResults.length, false);
-    notifyListeners();
   }
 
   void updateEventState(bool state, int i) {
@@ -342,6 +343,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     loadPreferredSummarizationApp();
 
     fetchAndCacheEnabledConversationApps();
+
+    // Pre-cache audio files in background
+    if (conversation.hasAudio()) {
+      precacheConversationAudio(conversation.id);
+    }
 
     if (!conversation.discarded) {
       getHasConversationSummaryRating(conversation.id).then((value) {
@@ -589,6 +595,27 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     _cachedConversation = conversation;
     _cachedConversationId = conversation.id;
     notifyListeners();
+  }
+
+  Future<void> refreshConversation() async {
+    try {
+      final updatedConversation = await getConversationById(conversation.id);
+      if (updatedConversation != null) {
+        _cachedConversation = updatedConversation;
+        conversationProvider?.updateConversation(updatedConversation);
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error refreshing conversation: $e');
+    }
+  }
+
+  void updateFolderIdLocally(String? newFolderId) {
+    if (_cachedConversation != null) {
+      _cachedConversation!.folderId = newFolderId;
+      conversationProvider?.updateConversation(_cachedConversation!);
+      notifyListeners();
+    }
   }
 
   String? _preferredSummarizationAppId;

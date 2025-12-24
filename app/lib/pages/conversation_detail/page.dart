@@ -765,6 +765,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                       return ConversationBottomBar(
                         mode: ConversationBottomBarMode.detail,
                         selectedTab: selectedTab,
+                        conversation: conversation,
                         hasSegments: conversation.transcriptSegments.isNotEmpty ||
                             conversation.photos.isNotEmpty ||
                             conversation.externalIntegration != null,
@@ -1042,7 +1043,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   }
 }
 
-class SummaryTab extends StatelessWidget {
+class SummaryTab extends StatefulWidget {
   final String searchQuery;
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
@@ -1057,7 +1058,16 @@ class SummaryTab extends StatelessWidget {
   });
 
   @override
+  State<SummaryTab> createState() => _SummaryTabState();
+}
+
+class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: () {
@@ -1070,8 +1080,8 @@ class SummaryTab extends StatelessWidget {
         final isEditing = !FocusScope.of(context).hasPrimaryFocus;
         FocusScope.of(context).unfocus();
         // If search is empty and not editing, call the callback to close search
-        if (!isEditing && searchQuery.isEmpty && onTapWhenSearchEmpty != null) {
-          onTapWhenSearchEmpty!();
+        if (!isEditing && widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
+          widget.onTapWhenSearchEmpty!();
         }
       },
       onDoubleTap: () {
@@ -1097,9 +1107,9 @@ class SummaryTab extends StatelessWidget {
                   data.item1
                       ? const ReprocessDiscardedWidget()
                       : GetAppsWidgets(
-                          searchQuery: searchQuery,
-                          currentResultIndex: currentResultIndex,
-                          onMatchCountChanged: onMatchCountChanged,
+                          searchQuery: widget.searchQuery,
+                          currentResultIndex: widget.currentResultIndex,
+                          onMatchCountChanged: widget.onMatchCountChanged,
                         ),
                   const GetGeolocationWidgets(),
                   const SizedBox(height: 150),
@@ -1113,7 +1123,7 @@ class SummaryTab extends StatelessWidget {
   }
 }
 
-class TranscriptWidgets extends StatelessWidget {
+class TranscriptWidgets extends StatefulWidget {
   final String searchQuery;
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
@@ -1128,13 +1138,22 @@ class TranscriptWidgets extends StatelessWidget {
   });
 
   @override
+  State<TranscriptWidgets> createState() => _TranscriptWidgetsState();
+}
+
+class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: () {
         FocusScope.of(context).unfocus();
-        if (searchQuery.isEmpty && onTapWhenSearchEmpty != null) {
-          onTapWhenSearchEmpty!();
+        if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
+          widget.onTapWhenSearchEmpty!();
         }
       },
       onDoubleTap: () {
@@ -1172,12 +1191,12 @@ class TranscriptWidgets extends StatelessWidget {
                 canDisplaySeconds: provider.canDisplaySeconds,
                 isConversationDetail: true,
                 bottomMargin: 150,
-                searchQuery: searchQuery,
-                currentResultIndex: currentResultIndex,
-                onTapWhenSearchEmpty: onTapWhenSearchEmpty,
+                searchQuery: widget.searchQuery,
+                currentResultIndex: widget.currentResultIndex,
+                onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,
                 segmentControllers: provider.segmentControllers,
                 segmentFocusNodes: provider.segmentFocusNodes,
-                onMatchCountChanged: onMatchCountChanged,
+                onMatchCountChanged: widget.onMatchCountChanged,
                 editSegment: (segmentId, speakerId) {
                   final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                   if (!connectivityProvider.isConnected) {

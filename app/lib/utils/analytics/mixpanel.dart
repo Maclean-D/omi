@@ -1052,6 +1052,44 @@ class MixpanelManager {
     });
   }
 
+  // ============================================================================
+  // AUDIO PLAYBACK TRACKING
+  // ============================================================================
+
+  void audioPlaybackStarted({
+    required String conversationId,
+    int? durationSeconds,
+  }) {
+    track('Audio Playback Started', properties: {
+      'conversation_id': conversationId,
+      if (durationSeconds != null) 'duration_seconds': durationSeconds,
+    });
+  }
+
+  void audioPlaybackPaused({
+    required String conversationId,
+    required int positionSeconds,
+    int? durationSeconds,
+  }) {
+    track('Audio Playback Paused', properties: {
+      'conversation_id': conversationId,
+      'position_seconds': positionSeconds,
+      if (durationSeconds != null) 'duration_seconds': durationSeconds,
+      if (durationSeconds != null && durationSeconds > 0)
+        'completion_percentage': ((positionSeconds / durationSeconds) * 100).round(),
+    });
+  }
+
+  void audioPlaybackSeeked({
+    required String conversationId,
+    required int toPositionSeconds,
+  }) {
+    track('Audio Playback Seeked', properties: {
+      'conversation_id': conversationId,
+      'to_position_seconds': toPositionSeconds,
+    });
+  }
+
   void actionItemExported({
     required String actionItemId,
     required String appName,
@@ -1290,5 +1328,73 @@ class MixpanelManager {
       'app_id': appId,
       'app_name': appName,
     });
+  }
+
+  // ============================================================================
+  // FOLDER TRACKING
+  // ============================================================================
+
+  void folderCreated({
+    required String folderId,
+    required String folderName,
+    required String icon,
+    required String color,
+  }) {
+    track('Folder Created', properties: {
+      'folder_id': folderId,
+      'folder_name': folderName,
+      'icon': icon,
+      'color': color,
+    });
+  }
+
+  void folderUpdated({
+    required String folderId,
+    required String folderName,
+  }) {
+    track('Folder Updated', properties: {
+      'folder_id': folderId,
+      'folder_name': folderName,
+    });
+  }
+
+  void folderDeleted({
+    required String folderId,
+    required String folderName,
+    required int conversationCount,
+    String? moveToFolderId,
+  }) {
+    track('Folder Deleted', properties: {
+      'folder_id': folderId,
+      'folder_name': folderName,
+      'conversation_count': conversationCount,
+      if (moveToFolderId != null) 'move_to_folder_id': moveToFolderId,
+      'moved_conversations': moveToFolderId != null,
+    });
+  }
+
+  void folderSelected({
+    String? folderId,
+    String? folderName,
+  }) {
+    track('Folder Selected', properties: {
+      if (folderId != null) 'folder_id': folderId,
+      if (folderName != null) 'folder_name': folderName,
+      'is_all_tab': folderId == null,
+    });
+  }
+
+  void folderContextMenuOpened({
+    required String folderId,
+    required String folderName,
+  }) {
+    track('Folder Context Menu Opened', properties: {
+      'folder_id': folderId,
+      'folder_name': folderName,
+    });
+  }
+
+  void createFolderButtonClicked() {
+    track('Create Folder Button Clicked');
   }
 }
