@@ -59,7 +59,15 @@ class TranscriptWidget extends StatefulWidget {
 }
 
 class _TranscriptWidgetState extends State<TranscriptWidget> {
-  // Local editing state
+  // Cache for person data to avoid repeated lookups
+  final Map<String?, Person?> _personCache = {};
+  // Cache for decoded text to avoid repeated decoding
+  final Map<String, String> _decodedTextCache = {};
+
+  // ScrollController to enable proper scrolling
+  final ScrollController _scrollController = ScrollController();
+
+  // Edit state
   String? _editingSegmentId;
 
   bool _isEditing(String id) => _editingSegmentId == id;
@@ -70,43 +78,16 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final node = widget.segmentFocusNodes?[id];
-      if (node != null) {
-        node.requestFocus();
-        
-        // Attach a one-time listener to handle focus loss (tap outside)
-        void focusListener() {
-          if (!node.hasFocus) {
-            node.removeListener(focusListener);
-            if (_editingSegmentId == id) {
-              setState(() {
-                _editingSegmentId = null;
-              });
-            }
-          }
-        }
-        node.addListener(focusListener);
-      }
+      widget.segmentFocusNodes?[id]?.requestFocus();
     });
   }
 
   void _exitEdit() {
-    final id = _editingSegmentId;
-    if (id == null) return;
-
-    widget.segmentFocusNodes?[id]?.unfocus();
+    if (_editingSegmentId == null) return;
     setState(() {
       _editingSegmentId = null;
     });
   }
-
-  // Cache for person data to avoid repeated lookups
-  final Map<String?, Person?> _personCache = {};
-  // Cache for decoded text to avoid repeated decoding
-  final Map<String, String> _decodedTextCache = {};
-
-  // ScrollController to enable proper scrolling
-  final ScrollController _scrollController = ScrollController();
 
   // Auto-scroll state management
   bool _userHasScrolled = false;
@@ -153,10 +134,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     return _speakerColors[colorIndex].withValues(alpha: 0.3);
   }
 
-  bool _canEdit(String id) =>
-      widget.segmentControllers?.containsKey(id) == true &&
-      widget.segmentFocusNodes?.containsKey(id) == true;
-
   Widget _getSpeakerAvatar(int speakerId, bool isUser, Person? person) {
     if (speakerId == omiSpeakerId) {
       return Image.asset(
@@ -183,7 +160,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   void initState() {
     super.initState();
     _previousSegmentCount = widget.segments.length;
-    _userHasScrolled = false;
     _initializeSegmentKeys();
     _rebuildMatchKeys();
 
@@ -206,29 +182,17 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   void _rebuildMatchKeys() {
     _matchKeys.clear();
-    if (widget.searchQuery.isEmpty) {
-      widget.onMatchCountChanged?.call(0);
-      return;
-    }
+    if (widget.searchQuery.isEmpty) return;
 
     final searchQuery = widget.searchQuery.toLowerCase();
 
     for (var segment in widget.segments) {
-      // Use edited text from controller if available, otherwise use original segment text
-      String text;
-      if (widget.segmentControllers?.containsKey(segment.id) == true) {
-        text = widget.segmentControllers![segment.id]!.text.toLowerCase();
-      } else {
-        text = _getDecodedText(segment.text).toLowerCase();
-      }
+      final text = _getDecodedText(segment.text).toLowerCase();
       final matches = RegExp(RegExp.escape(searchQuery), caseSensitive: false).allMatches(text);
       for (final _ in matches) {
         _matchKeys.add(GlobalKey());
       }
     }
-
-    // Notify parent of the match count
-    widget.onMatchCountChanged?.call(_matchKeys.length);
   }
 
   @override
@@ -254,9 +218,11 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     // Check if new segments were added
     if (widget.segments.length > _previousSegmentCount && !_userHasScrolled) {
       _previousSegmentCount = widget.segments.length;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToBottomGently();
-      });
+      if (_editingSegmentId == null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _scrollToBottomGently();
+        });
+      }
     } else {
       _previousSegmentCount = widget.segments.length;
     }
@@ -326,14 +292,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    // Only auto-scroll to bottom if not editing and not manually scrolled
-    // Check if any segment has focus (is being edited)
-    final bool anySegmentEditing = widget.segmentFocusNodes?.values.any((node) => node.hasFocus) ?? false;
-    if (!anySegmentEditing && !_userHasScrolled) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToBottomGently();
-      });
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottomGently();
+    });
   }
 
   void _scrollToSearchResult() {
@@ -443,13 +404,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
     int globalMatchIndex = 0;
     for (int i = 0; i < segmentIndex; i++) {
-      // Use edited text from controller if available for counting matches
-      String segmentText;
-      if (widget.segmentControllers?.containsKey(widget.segments[i].id) == true) {
-        segmentText = widget.segmentControllers![widget.segments[i].id]!.text.toLowerCase();
-      } else {
-        segmentText = _getDecodedText(widget.segments[i].text).toLowerCase();
-      }
+      final segmentText = _getDecodedText(widget.segments[i].text).toLowerCase();
       final matches = RegExp(RegExp.escape(lowerQuery), caseSensitive: false).allMatches(segmentText);
       globalMatchIndex += matches.length;
     }
@@ -515,9 +470,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       behavior: HitTestBehavior.translucent,
       onTap: () {
         if (_editingSegmentId != null) {
+          final node = widget.segmentFocusNodes?[_editingSegmentId!];
+          if (node != null && node.hasFocus) return;
           _exitEdit();
           return;
         }
+
         if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
           widget.onTapWhenSearchEmpty!();
         }
@@ -558,10 +516,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final suggestion = widget.suggestions[data.id];
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final bool isUser = data.isUser;
-    final segmentKey = segmentIdx >= 0 && segmentIdx < _segmentKeys.length ? _segmentKeys[segmentIdx] : null;
-
     return Container(
-        key: segmentKey,
+        key: segmentIdx >= 0 && segmentIdx < _segmentKeys.length ? _segmentKeys[segmentIdx] : null,
         child: Padding(
           padding: EdgeInsetsDirectional.fromSTEB(
               widget.horizontalMargin ? 16 : 0, 4.0, widget.horizontalMargin ? 16 : 0, 4.0),
@@ -690,33 +646,19 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                 ),
                               ],
                             ),
-                            child: SelectionArea(
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onDoubleTap: () {
+                                if (widget.searchQuery.isNotEmpty) return;
+                                _enterEdit(data.id);
+                              },
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  RichText(
-                                    textAlign: TextAlign.left,
-                                    text: TextSpan(
-                                      style: TextStyle(
-                                        letterSpacing: 0.0,
-                                        color: isUser ? Colors.white : Colors.grey.shade100,
-                                        fontSize: 15,
-                                        height: 1.4,
-                                      ),
-                                      children: widget.searchQuery.isNotEmpty
-                                          ? _highlightSearchMatchesWithKeys(
-                                              _getDecodedText(data.text),
-                                              widget.searchQuery,
-                                              segmentIdx,
-                                            )
-                                          : [
-                                              TextSpan(
-                                                text: _getDecodedText(data.text),
-                                              )
-                                            ],
-                                    ),
-                                  ),
+                                  _isEditing(data.id)
+                                      ? _buildEditor(data, isUser)
+                                      : _buildReadOnlyText(data, segmentIdx, isUser),
                                   if (data.translations.isNotEmpty) ...[
                                     const SizedBox(height: 8),
                                     ...data.translations.map((translation) => Padding(
@@ -804,283 +746,61 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-              ],
-
-              // Message bubble
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                  children: [
-                    // Speaker name (only shown when toggled)
-                    if (!isUser && _showSpeakerNames) ...[
-                      Padding(
-                        padding: const EdgeInsets.only(left: 4, bottom: 2),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            GestureDetector(
-                              onTap: data.speakerId == omiSpeakerId
-                                  ? null
-                                  : () {
-                                      widget.editSegment?.call(data.id, data.speakerId);
-                                      MixpanelManager().tagSheetOpened();
-                                    },
-                              child: Text(
-                                data.speakerId == omiSpeakerId
-                                    ? 'omi'
-                                    : (suggestion != null && person == null
-                                        ? '${suggestion.personName}?'
-                                        : (person != null ? person.name : 'Speaker ${data.speakerId}')),
-                                style: TextStyle(
-                                  color: data.speakerId == omiSpeakerId || person != null
-                                      ? Colors.grey.shade300
-                                      : (isTagging ? Colors.grey.shade300 : Colors.grey.shade400),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                            if (!data.speechProfileProcessed &&
-                                (data.personId ?? "").isEmpty &&
-                                data.speakerId != omiSpeakerId) ...[
-                              const SizedBox(width: 4),
-                              const Icon(
-                                Icons.help_outline,
-                                color: Colors.orange,
-                                size: 12,
-                              ),
-                            ],
-                            if (isTagging) ...[
-                              const SizedBox(width: 6),
-                              const SizedBox(
-                                width: 12,
-                                height: 12,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 1.5,
-                                  valueColor: AlwaysStoppedAnimation(Colors.white),
-                                ),
-                              )
-                            ] else if (suggestion != null && person == null) ...[
-                              const SizedBox(width: 6),
-                              GestureDetector(
-                                onTap: () => widget.onAcceptSuggestion?.call(suggestion),
-                                child: const Text(
-                                  'Tag',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    decoration: TextDecoration.underline,
-                                    decorationColor: Colors.white,
-                                  ),
-                                ),
-                              )
-                            ],
-                          ],
-                        ),
-                      ),
-                    ],
-
-                    // Chat bubble
-                    Row(
-                      mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-                      children: [
-                        Flexible(
-                          child: Container(
-                            constraints: BoxConstraints(
-                              maxWidth: MediaQuery.of(context).size.width * 0.75,
-                            ),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: _getSpeakerBubbleColor(isUser, data.speakerId),
-                              borderRadius: BorderRadius.only(
-                                topLeft: Radius.circular(isUser
-                                    ? 18
-                                    : (segmentIdx > 0 && !widget.segments[segmentIdx - 1].isUser)
-                                        ? 6
-                                        : 18),
-                                topRight: Radius.circular(isUser ? 18 : 18),
-                                bottomLeft: Radius.circular(18),
-                                bottomRight: Radius.circular(isUser ? 6 : 18),
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.15),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 1),
-                                ),
-                              ],
-                            ),
-                            child: GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onDoubleTap: _canEdit(data.id)
-                                  ? () {
-                                      // close search first
-                                      widget.onTapWhenSearchEmpty?.call();
-
-                                      // enter edit mode
-                                      _enterEdit(data.id);
-                                    }
-                                  : null,
-                              child: _isEditing(data.id) && widget.searchQuery.isEmpty
-                                  ? Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        if (widget.searchQuery.isEmpty && _canEdit(data.id))
-                                          GestureDetector(
-                                            behavior: HitTestBehavior.translucent,
-                                            onDoubleTap: () {
-                                              _exitEdit();
-                                            },
-                                            child: TextField(
-                                              controller: widget.segmentControllers![data.id],
-                                              focusNode: widget.segmentFocusNodes![data.id],
-                                              keyboardType: TextInputType.multiline,
-                                              minLines: 1,
-                                              maxLines: null,
-                                              style: TextStyle(
-                                                letterSpacing: 0.0,
-                                                color: isUser ? Colors.white : Colors.grey.shade100,
-                                                fontSize: 15,
-                                                height: 1.4,
-                                              ),
-                                              decoration: const InputDecoration(
-                                                border: InputBorder.none,
-                                                contentPadding: EdgeInsets.zero,
-                                                isDense: true,
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    )
-                                  : SelectionArea(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          RichText(
-                                            textAlign: TextAlign.left,
-                                            text: TextSpan(
-                                              style: TextStyle(
-                                                letterSpacing: 0.0,
-                                                color: isUser ? Colors.white : Colors.grey.shade100,
-                                                fontSize: 15,
-                                                height: 1.4,
-                                              ),
-                                              children: widget.searchQuery.isNotEmpty
-                                                  ? _highlightSearchMatchesWithKeys(
-                                                      widget.segmentControllers?.containsKey(data.id) == true
-                                                          ? widget.segmentControllers![data.id]!.text
-                                                          : _getDecodedText(data.text),
-                                                      widget.searchQuery,
-                                                      segmentIdx,
-                                                    )
-                                                  : [
-                                                      TextSpan(
-                                                        text: widget.segmentControllers?.containsKey(data.id) == true
-                                                            ? widget.segmentControllers![data.id]!.text
-                                                            : _getDecodedText(data.text),
-                                                      )
-                                                    ],
-                                            ),
-                                          ),
-                                          if (data.translations.isNotEmpty) ...[
-                                            const SizedBox(height: 8),
-                                            ...data.translations.map((translation) => Padding(
-                                                  padding: const EdgeInsets.only(top: 4),
-                                                  child: Text(
-                                                    _getDecodedText(translation.text),
-                                                    style: TextStyle(
-                                                      letterSpacing: 0.0,
-                                                      color: isUser
-                                                          ? Colors.white.withValues(alpha: 0.8)
-                                                          : Colors.grey.shade300.withValues(alpha: 0.8),
-                                                      fontSize: 14,
-                                                      fontStyle: FontStyle.italic,
-                                                      height: 1.3,
-                                                    ),
-                                                    textAlign: TextAlign.left,
-                                                  ),
-                                                )),
-                                            const SizedBox(height: 4),
-                                            _buildTranslationNotice(),
-                                          ],
-                                          // Timestamp and provider (only shown when toggled)
-                                          if (_showSpeakerNames &&
-                                              (widget.canDisplaySeconds || data.sttProvider != null)) ...[
-                                            const SizedBox(height: 4),
-                                            Row(
-                                              mainAxisAlignment: MainAxisAlignment.end,
-                                              children: [
-                                                if (data.sttProvider != null) ...[
-                                                  Text(
-                                                    SttProviderConfig.getDisplayName(data.sttProvider),
-                                                    style: TextStyle(
-                                                      color: isUser
-                                                          ? Colors.white.withValues(alpha: 0.5)
-                                                          : Colors.grey.shade500,
-                                                      fontSize: 10,
-                                                      fontStyle: FontStyle.italic,
-                                                    ),
-                                                  ),
-                                                  if (widget.canDisplaySeconds) ...[
-                                                    Text(
-                                                      ' · ',
-                                                      style: TextStyle(
-                                                        color: isUser
-                                                            ? Colors.white.withValues(alpha: 0.5)
-                                                            : Colors.grey.shade500,
-                                                        fontSize: 10,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ],
-                                                if (widget.canDisplaySeconds)
-                                                  Text(
-                                                    data.getTimestampString(),
-                                                    style: TextStyle(
-                                                      color: isUser
-                                                          ? Colors.white.withValues(alpha: 0.7)
-                                                          : Colors.grey.shade400,
-                                                      fontSize: 11,
-                                                    ),
-                                                  ),
-                                              ],
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              if (isUser) ...[
-                const SizedBox(width: 8),
-                // Avatar for user (right side)
-                GestureDetector(
-                  onTap: _toggleShowSpeakerNames,
-                  child: Column(
-                    children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId),
-                        child: _getSpeakerAvatar(data.speakerId, isUser, person),
-                      ),
-                      const SizedBox(height: 2),
-                    ],
-                  ),
-                ),
               ],
             ],
           ),
         ));
+  }
+
+  Widget _buildReadOnlyText(TranscriptSegment data, int segmentIdx, bool isUser) {
+    return SelectionArea(
+      child: RichText(
+        textAlign: TextAlign.left,
+        text: TextSpan(
+          style: TextStyle(
+            letterSpacing: 0.0,
+            color: isUser ? Colors.white : Colors.grey.shade100,
+            fontSize: 15,
+            height: 1.4,
+          ),
+          children: widget.searchQuery.isNotEmpty
+              ? _highlightSearchMatchesWithKeys(
+                  _getDecodedText(data.text),
+                  widget.searchQuery,
+                  segmentIdx,
+                )
+              : [
+                  TextSpan(text: _getDecodedText(data.text)),
+                ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEditor(TranscriptSegment data, bool isUser) {
+    final controller = widget.segmentControllers![data.id]!;
+    final focusNode = widget.segmentFocusNodes![data.id]!;
+
+    return TextField(
+      controller: controller,
+      focusNode: focusNode,
+      keyboardType: TextInputType.multiline,
+      minLines: 1,
+      maxLines: null,
+      autofocus: false,
+      style: TextStyle(
+        letterSpacing: 0.0,
+        color: isUser ? Colors.white : Colors.grey.shade100,
+        fontSize: 15,
+        height: 1.4,
+      ),
+      decoration: const InputDecoration(
+        border: InputBorder.none,
+        isDense: true,
+        contentPadding: EdgeInsets.zero,
+      ),
+      onEditingComplete: _exitEdit,
+    );
   }
 
   Widget _buildTranslationNotice() {
